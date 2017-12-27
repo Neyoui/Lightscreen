@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  Christian Kaiser
+ * Copyright (C) 2017  Christian Kaiser
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -40,6 +40,12 @@ class LightscreenWindow : public QMainWindow
     Q_OBJECT
 
 public:
+    enum Action {
+        ShowMainWindow = 5,
+        OpenScreenshotFolder = 6
+    };
+    Q_ENUM(Action)
+
     LightscreenWindow(QWidget *parent = 0);
     ~LightscreenWindow();
 
@@ -47,19 +53,20 @@ public slots:
     void action(int mode = 3);
     void areaHotkey();
     void checkForUpdates();
-    void cleanup(Screenshot::Options &options);
+    void cleanup(const Screenshot::Options &options);
     void closeToTrayWarning();
     bool closingWithoutTray();
     void createUploadMenu();
     void goToFolder();
     void messageClicked();
-    void messageReceived(const QString &message);
+    void executeArgument(const QString &message);
+    void executeArguments(const QStringList &arguments);
     void notify(const Screenshot::Result &result);
     void preview(Screenshot *screenshot);
     void quit();
     void restoreNotification();
     void setStatus(QString status = "");
-    void screenshotAction(int mode = 0);
+    void screenshotAction(Screenshot::Mode mode = Screenshot::None);
     void screenshotActionTriggered(QAction *action);
     void screenHotkey();
     void showHotkeyError(const QStringList &hotkeys);
@@ -68,14 +75,13 @@ public slots:
     void showScreenshotMessage(const Screenshot::Result &result, const QString &fileName);
     void showUploaderError(const QString &error);
     void showUploaderMessage(const QString &fileName, const QString &url);
-    void toggleVisibility(QSystemTrayIcon::ActivationReason reason = QSystemTrayIcon::DoubleClick);
+    void toggleVisibility();
     void updateStatus();
     void updaterDone(bool result);
     void upload(const QString &fileName);
     void uploadCancel();
     void uploadLast();
     void uploadProgress(int progress);
-    void uploadMenuShown();
     void windowHotkey();
     void windowPickerHotkey();
 
@@ -105,7 +111,7 @@ private:
     bool mReviveMain;
     bool mWasVisible;
     int  mLastMessage;
-    int  mLastMode;
+    Screenshot::Mode  mLastMode;
     QString mLastScreenshot;
     QPointer<QSystemTrayIcon> mTrayIcon;
     QPointer<PreviewDialog> mPreviewDialog;

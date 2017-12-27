@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  Christian Kaiser
+ * Copyright (C) 2017  Christian Kaiser
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -38,7 +38,7 @@ UpdaterDialog::UpdaterDialog(QWidget *parent) :
     bar->setRange(0, 0);
 
     QLabel *label = new QLabel(tr("Checking for updates..."), this);
-    connect(label, SIGNAL(linkActivated(QString)), this, SLOT(link(QString)));
+    connect(label, &QLabel::linkActivated, this, &UpdaterDialog::link);
 
     setLabel(label);
     setBar(bar);

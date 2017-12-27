@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  Christian Kaiser
+ * Copyright (C) 2017  Christian Kaiser
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -53,6 +53,9 @@ private slots:
 
 protected:
     bool event(QEvent *event);
+    void mouseDoubleClickEvent(QMouseEvent *event);
+    void mousePressEvent(QMouseEvent *event);
+    void mouseMoveEvent(QMouseEvent *event);
     void timerEvent(QTimerEvent *event);
 
 private:
@@ -64,6 +67,7 @@ private:
     QPushButton    *mNextButton;
     QPushButton    *mPrevButton;
     QStackedLayout *mStack;
+    QPoint mDragStartPosition;
 };
 
 #endif // PREVIEWDIALOG_H

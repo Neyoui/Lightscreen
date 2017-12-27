@@ -1,5 +1,5 @@
 ﻿/*
- * Copyright (C) 2016  Christian Kaiser
+ * Copyright (C) 2017  Christian Kaiser
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -39,11 +39,17 @@
 #include <string>
 #include <QMessageBox>
 #include <QPainter>
+#include <QPair>
 
 #ifdef Q_OS_WIN
     #include <QtWin>
     #include <qt_windows.h>
-    #include <shlobj.h>
+    #include <ShlObj.h>
+
+    // Define for MinGW
+    #ifndef SM_CXPADDEDBORDER
+        #define SM_CXPADDEDBORDER 92
+    #endif
 #elif defined(Q_OS_LINUX)
     #include <QX11Info>
     #include <X11/X.h>
@@ -54,7 +60,7 @@
 
 #include "os.h"
 
-QPixmap os::cursor()
+QPair<QPixmap, QPoint> os::cursor()
 {
 #ifdef Q_OS_WIN
     /*
@@ -63,6 +69,7 @@ QPixmap os::cursor()
     */
 
     QPixmap pixmap;
+    QPoint hotspot;
 
     CURSORINFO cursorInfo;
     cursorInfo.cbSize = sizeof(cursorInfo);
@@ -84,7 +91,7 @@ QPixmap os::cursor()
             QImage img = orig.toImage();
 
             int h = img.height() / 2;
-            int w = img.bytesPerLine() / sizeof(quint32);
+            int w = static_cast<uint>(img.bytesPerLine()) / sizeof(quint32);
 
             QImage out(img.width(), h, QImage::Format_MonoLSB);
             QImage outmask(img.width(), h, QImage::Format_MonoLSB);
@@ -105,6 +112,9 @@ QPixmap os::cursor()
             pixmap = QBitmap::fromImage(out, Qt::ColorOnly);
         }
 
+        hotspot.setX(static_cast<int>(info.xHotspot));
+        hotspot.setY(static_cast<int>(info.yHotspot));
+
         if (info.hbmMask) {
             ::DeleteObject(info.hbmMask);
         }
@@ -112,11 +122,13 @@ QPixmap os::cursor()
         if (info.hbmColor) {
             ::DeleteObject(info.hbmColor);
         }
+
+        ::DeleteObject(cursor);
     }
 
-    return pixmap;
+    return QPair<QPixmap, QPoint>(pixmap, hotspot);
 #else
-    return QPixmap();
+    return QPair<QPixmap, QPoint>(QPixmap(), QPoint());
 #endif
 }
 
@@ -147,9 +159,7 @@ QString os::getDocumentsPath()
                                   NULL,
                                   0,
                                   szPath))) {
-        std::wstring path(szPath);
-
-        return QString::fromWCharArray(path.c_str());
+        return QString::fromWCharArray(szPath);
     }
 
     return QDir::homePath() + QDir::separator() + "My Documents";
@@ -229,7 +239,6 @@ QPixmap os::grabWindow(WId winId)
     DeleteObject(hbmCapture);
 
     return pixmap;
-
 #else
     return QPixmap::grabWindow(winId);
 #endif
@@ -281,7 +290,7 @@ void os::setStartup(bool startup, bool hide)
 #endif
 }
 
-QGraphicsEffect *os::shadow(QColor color, int blurRadius, int offset)
+QGraphicsEffect *os::shadow(const QColor &color, int blurRadius, int offset)
 {
     QGraphicsDropShadowEffect *shadowEffect = new QGraphicsDropShadowEffect;
     shadowEffect->setBlurRadius(blurRadius);

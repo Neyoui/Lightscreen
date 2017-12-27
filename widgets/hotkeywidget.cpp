@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  Christian Kaiser
+ * Copyright (C) 2017  Christian Kaiser
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -61,7 +61,7 @@ void HotkeyWidget::showError()
     mShowingError = true;
 
     setStyleSheet(mDefaultStyleSheet + "color: #d90000;");
-    QTimer::singleShot(1000, this, SLOT(hideError()));
+    QTimer::singleShot(1000, this, &HotkeyWidget::hideError);
 }
 
 void HotkeyWidget::setHotkeyText()

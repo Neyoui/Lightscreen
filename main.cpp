@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  Christian Kaiser
+ * Copyright (C) 2017  Christian Kaiser
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -25,7 +25,8 @@
 #endif
 
 #include "tools/os.h"
-#include <QtSingleApplication>
+#include "tools/SingleApplication/singleapplication.h"
+
 #include "lightscreenwindow.h"
 
 int main(int argc, char *argv[])
@@ -34,29 +35,20 @@ int main(int argc, char *argv[])
     qSetMessagePattern("%{message} @%{line}[%{function}()]");
 #endif
 
-    QtSingleApplication application(argc, argv);
-    application.setOrganizationName("K");
-    application.setApplicationName("Lightscreen");
-    application.setApplicationVersion("2.2");
+    QApplication::setOrganizationName("K");
+    QApplication::setApplicationName("Lightscreen");
+    QApplication::setApplicationVersion(APP_VERSION);
+    QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+
+    SingleApplication application(argc, argv);
+
     application.setQuitOnLastWindowClosed(false);
-
-    if (application.isRunning()) {
-        if (application.arguments().size() > 1) {
-            QStringList arguments = application.arguments();
-            arguments.removeFirst();
-            application.sendMessage(arguments.join(" "));
-        } else {
-            application.sendMessage("--wake");
-        }
-
-        return 0;
-    }
 
     LightscreenWindow lightscreen;
 
 #ifdef Q_OS_WIN
     if (QSysInfo::WindowsVersion >= QSysInfo::WV_WINDOWS7) {
-        QWinJumpList *jumplist = new QWinJumpList(&lightscreen);
+        auto jumplist = new QWinJumpList(&lightscreen);
 
         QColor backgroundColor = qApp->palette("QToolTip").color(QPalette::Background);
 
@@ -65,20 +57,20 @@ int main(int argc, char *argv[])
             backgroundColor = Qt::black;
         }
 
-        QWinJumpListCategory *screenshotCategory = new QWinJumpListCategory("Screenshot");
+        auto screenshotCategory = new QWinJumpListCategory(QObject::tr("Screenshot"));
         screenshotCategory->setVisible(true);
-        screenshotCategory->addLink(os::icon("screen", backgroundColor), QObject::tr("Screen")       , application.applicationFilePath(), QStringList("--screen"));
-        screenshotCategory->addLink(os::icon("area", backgroundColor), QObject::tr("Area")         , application.applicationFilePath(), QStringList("--area"));
-        screenshotCategory->addLink(os::icon("pickWindow", backgroundColor), QObject::tr("Pick Window")  , application.applicationFilePath(), QStringList("--pickwindow"));
+        screenshotCategory->addLink(os::icon("screen", backgroundColor), QObject::tr("Screen")         , application.applicationFilePath(), QStringList("--screen"));
+        screenshotCategory->addLink(os::icon("area", backgroundColor), QObject::tr("Area")             , application.applicationFilePath(), QStringList("--area"));
+        screenshotCategory->addLink(os::icon("pickWindow", backgroundColor), QObject::tr("Pick Window"), application.applicationFilePath(), QStringList("--pickwindow"));
 
-        QWinJumpListCategory *uploadCategory = new QWinJumpListCategory("Upload");
+        auto uploadCategory = new QWinJumpListCategory(QObject::tr("Upload"));
         uploadCategory->setVisible(true);
-        uploadCategory->addLink(os::icon("imgur", backgroundColor), QObject::tr("Upload Last")    , application.applicationFilePath(), QStringList("--uploadlast"));
-        uploadCategory->addLink(os::icon("view-history", backgroundColor), QObject::tr("View History")   , application.applicationFilePath(), QStringList("--viewhistory"));
+        uploadCategory->addLink(os::icon("imgur", backgroundColor), QObject::tr("Upload Last")        , application.applicationFilePath(), QStringList("--uploadlast"));
+        uploadCategory->addLink(os::icon("view-history", backgroundColor), QObject::tr("View History"), application.applicationFilePath(), QStringList("--viewhistory"));
 
-        QWinJumpListCategory *actionsCategory = new QWinJumpListCategory("Actions");
+        auto actionsCategory = new QWinJumpListCategory(QObject::tr("Actions"));
         actionsCategory->setVisible(true);
-        actionsCategory->addLink(os::icon("configure", backgroundColor), QObject::tr("Options")          , application.applicationFilePath(), QStringList("--options"));
+        actionsCategory->addLink(os::icon("configure", backgroundColor), QObject::tr("Options")       , application.applicationFilePath(), QStringList("--options"));
         actionsCategory->addLink(os::icon("folder", backgroundColor), QObject::tr("Go to Folder")     , application.applicationFilePath(), QStringList("--folder"));
         actionsCategory->addLink(os::icon("no.big", backgroundColor), QObject::tr("Quit Lightscreen") , application.applicationFilePath(), QStringList("--quit"));
 
@@ -89,16 +81,13 @@ int main(int argc, char *argv[])
 #endif
 
     if (application.arguments().size() > 1) {
-        foreach (QString argument, application.arguments()) {
-            lightscreen.messageReceived(argument);
-        }
+        lightscreen.executeArguments(application.arguments());
     } else {
         lightscreen.show();
     }
 
-    QObject::connect(&application, SIGNAL(messageReceived(const QString &)), &lightscreen, SLOT(messageReceived(const QString &)));
-    QObject::connect(&lightscreen, SIGNAL(finished()), &application, SLOT(quit()));
+    QObject::connect(&application, &SingleApplication::instanceArguments, &lightscreen, &LightscreenWindow::executeArguments);
+    QObject::connect(&lightscreen, &LightscreenWindow::finished, &application, &SingleApplication::quit);
 
-    int result = application.exec();
-    return result;
+    return application.exec();
 }

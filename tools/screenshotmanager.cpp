@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  Christian Kaiser
+ * Copyright (C) 2017  Christian Kaiser
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -30,46 +30,47 @@
 #include <QtSql/QSqlQuery>
 #include <QtSql/QSqlRecord>
 
-ScreenshotManager::ScreenshotManager(QObject *parent = 0) : QObject(parent)
+ScreenshotManager::ScreenshotManager(QObject *parent) : QObject(parent), mHistoryInitialized(false)
 {
     if (QFile::exists(qApp->applicationDirPath() + QDir::separator() + "config.ini")) {
-        mSettings     = new QSettings(qApp->applicationDirPath() + QDir::separator() + "config.ini", QSettings::IniFormat);
+        mSettings     = new QSettings(qApp->applicationDirPath() + QDir::separator() + "config.ini", QSettings::IniFormat, this);
         mPortableMode = true;
         mHistoryPath  = qApp->applicationDirPath() + QDir::separator();
     } else {
-        mSettings     = new QSettings();
+        mSettings     = new QSettings(this);
         mPortableMode = false;
         mHistoryPath  = QStandardPaths::writableLocation(QStandardPaths::DataLocation) + QDir::separator();
     }
 
-    initHistory();
-
-    connect(Uploader::instance(), SIGNAL(done(QString, QString, QString)), this, SLOT(uploadDone(QString, QString, QString)));
-}
-
-ScreenshotManager::~ScreenshotManager()
-{
-    delete mSettings;
+    connect(Uploader::instance(), &Uploader::done, this, &ScreenshotManager::uploadDone);
 }
 
 void ScreenshotManager::initHistory()
 {
+    if (mHistoryInitialized) {
+        return;
+    }
+
     // Creating the SQLite database.
     QSqlDatabase history = QSqlDatabase::addDatabase("QSQLITE");
 
-    QDir hp(mHistoryPath);
+    QDir historyPath(mHistoryPath);
 
-    if (!hp.exists()) {
-        hp.mkpath(mHistoryPath);
+    if (!historyPath.exists()) {
+        historyPath.mkpath(mHistoryPath);
     }
 
     history.setHostName("localhost");
     history.setDatabaseName(mHistoryPath + "history.sqlite");
 
     if (history.open()) {
-        history.exec("CREATE TABLE IF NOT EXISTS history (fileName text, URL text, deleteURL text, time integer)");
+        QSqlQuery tableQuery;
+        mHistoryInitialized = tableQuery.exec("CREATE TABLE IF NOT EXISTS history (fileName text, URL text, deleteURL text, time integer)");
+
+        history.exec("CREATE INDEX IF NOT EXISTS fileName_index ON history(fileName)");
     } else {
         qCritical() << "Could not open SQLite DB.";
+        mHistoryInitialized = false;
     }
 }
 
@@ -89,25 +90,33 @@ void ScreenshotManager::saveHistory(const QString &fileName, const QString &url,
         return;
     }
 
+    if (!mHistoryInitialized) {
+        initHistory();
+    }
+
     QString deleteUrl;
 
     if (!deleteHash.isEmpty()) {
         deleteUrl = "https://imgur.com/delete/" + deleteHash;
     }
 
-    QSqlQuery query;
-    query.prepare("INSERT INTO history (fileName, URL, deleteURL, time) VALUES(?, ?, ?, ?)");
-    query.addBindValue(fileName);
-    query.addBindValue(url);
-    query.addBindValue(deleteUrl);
-    query.addBindValue(QDateTime::currentMSecsSinceEpoch());
-    query.exec();
+    QSqlQuery saveHistoryQuery;
+    saveHistoryQuery.prepare("INSERT INTO history (fileName, URL, deleteURL, time) VALUES(?, ?, ?, ?)");
+    saveHistoryQuery.addBindValue(fileName);
+    saveHistoryQuery.addBindValue(url);
+    saveHistoryQuery.addBindValue(deleteUrl);
+    saveHistoryQuery.addBindValue(QDateTime::currentMSecsSinceEpoch());
+    saveHistoryQuery.exec();
 }
 
 void ScreenshotManager::updateHistory(const QString &fileName, const QString &url, const QString &deleteHash)
 {
     if (!mSettings->value("/options/history", true).toBool() || url.isEmpty()) {
         return;
+    }
+
+    if (!mHistoryInitialized) {
+        initHistory();
     }
 
     QSqlQuery query;
@@ -131,6 +140,10 @@ void ScreenshotManager::updateHistory(const QString &fileName, const QString &ur
 
 void ScreenshotManager::removeHistory(const QString &fileName, qint64 time)
 {
+    if (!mHistoryInitialized) {
+        initHistory();
+    }
+
     QSqlQuery removeQuery;
     removeQuery.prepare("DELETE FROM history WHERE fileName = ? AND time = ?");
     removeQuery.addBindValue(fileName);
@@ -141,10 +154,15 @@ void ScreenshotManager::removeHistory(const QString &fileName, qint64 time)
 
 void ScreenshotManager::clearHistory()
 {
-    QSqlQuery clearQuery("DROP TABLE history");
-    clearQuery.exec();
+    if (!mHistoryInitialized) {
+        initHistory();
+    }
 
-    initHistory();
+    QSqlQuery deleteQuery("DELETE FROM history");
+    deleteQuery.exec();
+
+    QSqlQuery vacQuery("VACUUM");
+    vacQuery.exec();
 }
 
 //
@@ -174,16 +192,16 @@ void ScreenshotManager::take(Screenshot::Options &options)
     Screenshot *newScreenshot = new Screenshot(this, options);
     mScreenshots.append(newScreenshot);
 
-    connect(newScreenshot, SIGNAL(askConfirmation()), this, SLOT(askConfirmation()));
-    connect(newScreenshot, SIGNAL(cleanup())        , this, SLOT(cleanup()));
-    connect(newScreenshot, SIGNAL(finished())       , this, SLOT(finished()));
+    connect(newScreenshot, &Screenshot::askConfirmation, this, &ScreenshotManager::askConfirmation);
+    connect(newScreenshot, &Screenshot::cleanup        , this, &ScreenshotManager::cleanup);
+    connect(newScreenshot, &Screenshot::finished       , this, &ScreenshotManager::finished);
 
     newScreenshot->take();
 }
 
 void ScreenshotManager::uploadDone(const QString &fileName, const QString &url, const QString &deleteHash)
 {
-    foreach (Screenshot *screenshot, mScreenshots) {
+    for (Screenshot *screenshot : qAsConst(mScreenshots)) {
         if (screenshot->options().fileName == fileName
                 || screenshot->unloadedFileName() == fileName) {
             screenshot->uploadDone(url);
@@ -203,7 +221,7 @@ void ScreenshotManager::uploadDone(const QString &fileName, const QString &url, 
 }
 
 // Singleton
-ScreenshotManager *ScreenshotManager::mInstance = 0;
+ScreenshotManager *ScreenshotManager::mInstance = nullptr;
 
 ScreenshotManager *ScreenshotManager::instance()
 {

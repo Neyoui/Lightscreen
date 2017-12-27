@@ -21,81 +21,29 @@
 
 HistoryDialog::HistoryDialog(QWidget *parent) :
     QDialog(parent),
-    ui(new Ui::HistoryDialog)
+    ui(new Ui::HistoryDialog),
+    mModel(Q_NULLPTR),
+    mFilterModel(Q_NULLPTR)
 {
     ui->setupUi(this);
 
     ui->filterEdit->setText(tr("Filter.."));
     ui->filterEdit->installEventFilter(this);
 
-    if (QSqlDatabase::database().isOpen()) {
-        mModel = new QSqlTableModel(this);
-        mModel->setTable("history");
-        mModel->setHeaderData(0, Qt::Horizontal, tr("Screenshot"));
-        mModel->setHeaderData(1, Qt::Horizontal, tr("URL"));
-        mModel->select();
-
-        mFilterModel = new QSortFilterProxyModel(mModel);
-        mFilterModel->setSourceModel(mModel);
-        mFilterModel->setDynamicSortFilter(true);
-        mFilterModel->setSortCaseSensitivity(Qt::CaseInsensitive);
-        mFilterModel->setFilterCaseSensitivity(Qt::CaseInsensitive);
-        mFilterModel->setFilterKeyColumn(-1);
-
-        while (mModel->canFetchMore()) {
-            mModel->fetchMore();
-        }
-
-        ui->tableView->setWordWrap(false);
-        ui->tableView->setModel(mFilterModel);
-
-        ui->tableView->hideColumn(2); // No delete hash.
-        ui->tableView->hideColumn(3); // No timestamp.
-
-        ui->tableView->horizontalHeader()->setSectionsClickable(false);
-        ui->tableView->horizontalHeader()->setSectionsMovable(false);
-
-        ui->tableView->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
-        ui->tableView->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
-
-        ui->tableView->verticalHeader()->hide();
-
-        ui->tableView->setTextElideMode(Qt::ElideLeft);
-        ui->tableView->setEditTriggers(QAbstractItemView::NoEditTriggers);
-        ui->tableView->setAlternatingRowColors(true);
-        ui->tableView->setSelectionMode(QAbstractItemView::SingleSelection);
-        ui->tableView->setContextMenuPolicy(Qt::CustomContextMenu);
-        ui->tableView->setSortingEnabled(true);
-
-        if (ui->tableView->model()->rowCount() > 0) {
-            ui->clearButton->setEnabled(true);
-            ui->filterEdit->setEnabled(true);
-        }
-
-        connect(ui->tableView->selectionModel(), SIGNAL(selectionChanged(QItemSelection, QItemSelection)), this, SLOT(selectionChanged(QItemSelection, QItemSelection)));
-        connect(ui->tableView, SIGNAL(doubleClicked(QModelIndex)), this, SLOT(open(QModelIndex)));
-        connect(ui->tableView, SIGNAL(customContextMenuRequested(QPoint)), this, SLOT(contextMenu(QPoint)));
-    } else {
-        ui->tableView->setEnabled(false);
-        ui->clearButton->setEnabled(false);
-    }
-
-    if (Uploader::instance()->progress() > 0) {
-        ui->uploadProgressBar->setValue(Uploader::instance()->progress());
-    } else {
-        ui->uploadProgressWidget->setVisible(false);
-    }
-
     ui->cancelUploadButton->setIcon(os::icon("no"));
+    ui->tableView->setEnabled(false);
+    ui->clearButton->setEnabled(false);
 
-    connect(Uploader::instance(), SIGNAL(progress(int)), this, SLOT(uploadProgress(int)));
-    connect(Uploader::instance(), SIGNAL(done(QString, QString, QString)), this, SLOT(refresh()));
+    connect(Uploader::instance(), &Uploader::progressChanged, this, &HistoryDialog::uploadProgress);
+    connect(Uploader::instance(), &Uploader::done           , this, &HistoryDialog::refresh);
 
-    connect(ui->uploadButton      , SIGNAL(clicked()), this                    , SLOT(upload()));
-    connect(ui->cancelUploadButton, SIGNAL(clicked()), Uploader::instance()    , SLOT(cancel()));
-    connect(ui->cancelUploadButton, SIGNAL(clicked()), ui->uploadProgressWidget, SLOT(hide()));
+    connect(ui->uploadButton      , &QPushButton::clicked, this                    , &HistoryDialog::upload);
+    connect(ui->cancelUploadButton, &QPushButton::clicked, Uploader::instance()    , &Uploader::cancel);
+    connect(ui->cancelUploadButton, &QPushButton::clicked, ui->uploadProgressWidget, &QWidget::hide);
 
-    connect(ui->clearButton       , SIGNAL(clicked()), this                , SLOT(clear()));
+    connect(ui->clearButton, &QPushButton::clicked, this, &HistoryDialog::clear);
+
+    QTimer::singleShot(0, this, &HistoryDialog::init);
 }
 
 HistoryDialog::~HistoryDialog()
@@ -114,17 +62,20 @@ void HistoryDialog::clear()
     }
 
     ScreenshotManager::instance()->clearHistory();
-    close();
+    mModel->select();
+    ui->filterEdit->setEnabled(false);
+    ui->tableView->setEnabled(false);
+    ui->clearButton->setEnabled(false);
 }
 
 void HistoryDialog::contextMenu(const QPoint &point)
 {
-    mContextIndex = ui->tableView->indexAt(point);;
+    mContextIndex = ui->tableView->indexAt(point);
 
     QMenu contextMenu(ui->tableView);
 
     QAction copyAction((mContextIndex.column() == 0) ? tr("Copy Path") : tr("Copy URL"), &contextMenu);
-    connect(&copyAction, SIGNAL(triggered()), this, SLOT(copy()));
+    connect(&copyAction, &QAction::triggered, this, &HistoryDialog::copy);
     contextMenu.addAction(&copyAction);
 
     QAction deleteAction(tr("Delete from imgur.com"), &contextMenu);
@@ -138,14 +89,14 @@ void HistoryDialog::contextMenu(const QPoint &point)
     }
 
     if (mContextIndex.column() == 0) {
-        connect(&locationAction, SIGNAL(triggered()), this, SLOT(location()));
+        connect(&locationAction, &QAction::triggered, this, &HistoryDialog::location);
         contextMenu.addAction(&locationAction);
     } else {
-        connect(&deleteAction, SIGNAL(triggered()), this, SLOT(deleteImage()));
+        connect(&deleteAction, &QAction::triggered, this, &HistoryDialog::deleteImage);
         contextMenu.addAction(&deleteAction);
     }
 
-    connect(&removeAction, SIGNAL(triggered()), this, SLOT(removeHistoryEntry()));
+    connect(&removeAction, &QAction::triggered, this, &HistoryDialog::removeHistoryEntry);
     contextMenu.addAction(&removeAction);
     contextMenu.exec(QCursor::pos());
 }
@@ -183,7 +134,7 @@ void HistoryDialog::refresh()
     mModel->select();
 }
 
-void HistoryDialog::open(const QModelIndex &index)
+void HistoryDialog::openUrl(const QModelIndex &index)
 {
     if (index.column() == 0) {
         QDesktopServices::openUrl(QUrl("file:///" + index.data().toString()));
@@ -217,7 +168,7 @@ void HistoryDialog::selectionChanged(const QItemSelection &selected, const QItem
 
 void HistoryDialog::upload()
 {
-    Uploader::instance()->upload(mSelectedScreenshot);
+    Uploader::instance()->upload(mSelectedScreenshot, ScreenshotManager::instance()->settings()->value("options/upload/service", "imgur").toString());
     ui->uploadProgressWidget->setVisible(true);
 }
 
@@ -227,9 +178,78 @@ void HistoryDialog::uploadProgress(int progress)
     ui->uploadProgressBar->setValue(progress);
 }
 
+void HistoryDialog::init()
+{
+    ScreenshotManager::instance()->initHistory();
+
+    if (QSqlDatabase::database().isOpen()) {
+        setUpdatesEnabled(false);
+
+        mModel = new QSqlTableModel(this);
+        mModel->setTable("history");
+        mModel->setHeaderData(0, Qt::Horizontal, tr("Screenshot"));
+        mModel->setHeaderData(1, Qt::Horizontal, tr("URL"));
+        mModel->select();
+
+        mFilterModel = new QSortFilterProxyModel(mModel);
+        mFilterModel->setSourceModel(mModel);
+        mFilterModel->setDynamicSortFilter(true);
+        mFilterModel->setSortCaseSensitivity(Qt::CaseInsensitive);
+        mFilterModel->setFilterCaseSensitivity(Qt::CaseInsensitive);
+        mFilterModel->setFilterKeyColumn(-1);
+        mFilterModel->sort(3, Qt::DescendingOrder);
+
+        while (mModel->canFetchMore()) {
+            mModel->fetchMore();
+            qApp->processEvents();
+        }
+
+        ui->tableView->setWordWrap(false);
+        ui->tableView->setModel(mFilterModel);
+
+        ui->tableView->hideColumn(2); // No delete hash.
+        ui->tableView->hideColumn(3); // No timestamp.
+
+        ui->tableView->horizontalHeader()->setSectionsClickable(false);
+        ui->tableView->horizontalHeader()->setSectionsMovable(false);
+
+        ui->tableView->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+        ui->tableView->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+
+        ui->tableView->verticalHeader()->hide();
+
+        ui->tableView->setTextElideMode(Qt::ElideLeft);
+        ui->tableView->setEditTriggers(QAbstractItemView::NoEditTriggers);
+        ui->tableView->setAlternatingRowColors(true);
+        ui->tableView->setSelectionMode(QAbstractItemView::SingleSelection);
+        ui->tableView->setContextMenuPolicy(Qt::CustomContextMenu);
+        ui->tableView->setSortingEnabled(false);
+
+        if (ui->tableView->model()->rowCount() > 0) {
+            ui->tableView->setEnabled(true);
+            ui->clearButton->setEnabled(true);
+            ui->filterEdit->setEnabled(true);
+        }
+
+        connect(ui->tableView->selectionModel(), &QItemSelectionModel::selectionChanged, this, &HistoryDialog::selectionChanged);
+        connect(ui->tableView, &QTableView::doubleClicked, this, &HistoryDialog::openUrl);
+        connect(ui->tableView, &QTableView::customContextMenuRequested, this, &HistoryDialog::contextMenu);
+
+        setUpdatesEnabled(true);
+    }
+
+    if (Uploader::instance()->progress() > 0) {
+        ui->uploadProgressBar->setValue(Uploader::instance()->progress());
+    } else {
+        ui->uploadProgressWidget->setVisible(false);
+    }
+
+    ui->closeButton->setFocus();
+}
+
 bool HistoryDialog::eventFilter(QObject *object, QEvent *event)
 {
-    if (object == ui->filterEdit) {
+    if (object == ui->filterEdit && mFilterModel) {
         if (event->type() == QEvent::FocusIn) {
             if (ui->filterEdit->text() == tr("Filter..")) {
                 ui->filterEdit->setStyleSheet("");

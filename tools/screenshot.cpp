@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  Christian Kaiser
+ * Copyright (C) 2017  Christian Kaiser
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -26,6 +26,7 @@
 #include <QProcess>
 #include <QTextStream>
 #include <QScreen>
+#include <QStringBuilder>
 
 #include "windowpicker.h"
 #include "../dialogs/areadialog.h"
@@ -52,7 +53,9 @@ Screenshot::Screenshot(QObject *parent, Screenshot::Options options):
     mUnloaded(false),
     mUnloadFilename()
 {
-    // Here be crickets
+    if (mOptions.format == Screenshot::PNG) {
+        mOptions.quality = 80;
+    }
 }
 
 Screenshot::~Screenshot()
@@ -68,15 +71,15 @@ QString Screenshot::getName(const NamingOptions &options, const QString &prefix,
     int naming_largest = 0;
 
     if (options.flip) {
-        naming = "%1" + prefix;
+        naming = "%1" % prefix;
     } else {
-        naming = prefix + "%1";
+        naming = prefix % "%1";
     }
 
     switch (options.naming) {
     case Screenshot::Numeric: // Numeric
         // Iterating through the folder to find the largest numeric naming.
-        foreach (QString file, directory.entryList(QDir::Files)) {
+        for (auto file : directory.entryList(QDir::Files)) {
             if (file.contains(prefix)) {
                 file.chop(file.size() - file.lastIndexOf("."));
                 file.remove(prefix);
@@ -111,12 +114,12 @@ QString Screenshot::getName(const NamingOptions &options, const QString &prefix,
     return naming;
 }
 
-QString &Screenshot::unloadedFileName()
+const QString &Screenshot::unloadedFileName()
 {
     return mUnloadFilename;
 }
 
-Screenshot::Options &Screenshot::options()
+const Screenshot::Options &Screenshot::options()
 {
     return mOptions;
 }
@@ -174,7 +177,7 @@ void Screenshot::optimize()
 #ifdef Q_OS_UNIX
     optiPNG = "optipng";
 #else
-    optiPNG = qApp->applicationDirPath() + QDir::separator() + "optipng.exe";
+    optiPNG = qApp->applicationDirPath() % QDir::separator() % "optipng.exe";
 #endif
 
     if (!QFile::exists(optiPNG)) {
@@ -202,22 +205,22 @@ void Screenshot::save()
 {
     QString name = "";
     QString fileName = "";
-    Screenshot::Result result = Screenshot::Fail;
+    Screenshot::Result result = Screenshot::Failure;
 
     if (mOptions.file && !mOptions.saveAs)  {
         name = newFileName();
     } else if (mOptions.file && mOptions.saveAs) {
-        name = QFileDialog::getSaveFileName(0, tr("Save as.."), newFileName(), "*" + extension());
+        name = QFileDialog::getSaveFileName(0, tr("Save as.."), newFileName(), "*" % extension());
     }
 
-    if (!mOptions.replace && QFile::exists(name + extension())) {
+    if (!mOptions.replace && QFile::exists(name % extension())) {
         // Ugly? You should see my wife!
         int count = 0;
         int cunt  = 0;
 
         QString naming = QFileInfo(name).fileName();
 
-        foreach (QString file, QFileInfo(name + extension()).dir().entryList(QDir::Files)) {
+        for (auto file : QFileInfo(name % extension()).dir().entryList(QDir::Files)) {
             if (file.contains(naming)) {
                 file.remove(naming);
                 file.remove(" (");
@@ -232,10 +235,10 @@ void Screenshot::save()
             }
         }
 
-        name = name + " (" + QString::number(count + 1) + ")";
+        name = name % " (" % QString::number(count % 1) % ")";
     }
 
-    if (mOptions.clipboard && !(mOptions.upload && mOptions.imgurClipboard)) {
+    if (mOptions.clipboard && !(mOptions.upload && mOptions.urlClipboard)) {
         if (mUnloaded) {
             mUnloaded = false;
             mPixmap = QPixmap(mUnloadFilename);
@@ -244,22 +247,21 @@ void Screenshot::save()
         QApplication::clipboard()->setPixmap(mPixmap, QClipboard::Clipboard);
 
         if (!mOptions.file) {
-            result = (Screenshot::Result)1;
+            result = Screenshot::Success;
         }
     }
 
-    // In the following code I use  (Screenshot::Result)1 instead of Screenshot::Success because of some weird issue with the X11 headers. //TODO
     if (mOptions.file) {
-        fileName = name + extension();
+        fileName = name % extension();
 
         if (name.isEmpty()) {
             result = Screenshot::Cancel;
         } else if (mUnloaded) {
-            result = (QFile::rename(mUnloadFilename, fileName)) ? (Screenshot::Result)1 : Screenshot::Fail;
+            result = (QFile::rename(mUnloadFilename, fileName)) ? Screenshot::Success : Screenshot::Failure;
         } else if (mPixmap.save(fileName, 0, mOptions.quality)) {
-            result = (Screenshot::Result)1;
+            result = Screenshot::Success;
         } else {
-            result = Screenshot::Fail;
+            result = Screenshot::Failure;
         }
     }
 
@@ -331,9 +333,9 @@ void Screenshot::take()
 void Screenshot::upload()
 {
     if (mOptions.file) {
-        Uploader::instance()->upload(mOptions.fileName);
+        Uploader::instance()->upload(mOptions.fileName, mOptions.uploadService);
     } else if (unloadPixmap()) {
-        Uploader::instance()->upload(mUnloadFilename);
+        Uploader::instance()->upload(mUnloadFilename, mOptions.uploadService);
     } else {
         emit finished();
     }
@@ -341,11 +343,16 @@ void Screenshot::upload()
 
 void Screenshot::uploadDone(const QString &url)
 {
-    if (mOptions.imgurClipboard && !url.isEmpty()) {
+    if (mOptions.urlClipboard && !url.isEmpty()) {
         QApplication::clipboard()->setText(url, QClipboard::Clipboard);
     }
 
     emit finished();
+}
+
+void Screenshot::refresh()
+{
+    grabDesktop();
 }
 
 //
@@ -377,18 +384,20 @@ void Screenshot::activeWindow()
 #endif
 }
 
-QString Screenshot::extension() const
+const QString Screenshot::extension() const
 {
     switch (mOptions.format) {
     case Screenshot::PNG:
-        return ".png";
+        return QStringLiteral(".png");
         break;
     case Screenshot::BMP:
-        return ".bmp";
+        return QStringLiteral(".bmp");
+        break;
+    case Screenshot::WEBP:
+        return QStringLiteral(".webp");
         break;
     case Screenshot::JPEG:
-    default:
-        return ".jpg";
+        return QStringLiteral(".jpg");
         break;
     }
 }
@@ -396,26 +405,56 @@ QString Screenshot::extension() const
 void Screenshot::grabDesktop()
 {
     QRect geometry;
+    QPoint cursorPosition = QCursor::pos();
 
     if (mOptions.currentMonitor) {
-        geometry = QApplication::primaryScreen()->geometry();
+        int currentScreen = qApp->desktop()->screenNumber(cursorPosition);
+
+        geometry = qApp->desktop()->screen(currentScreen)->geometry();
+        cursorPosition = cursorPosition - geometry.topLeft();
     } else {
-        foreach (QScreen *screen, QGuiApplication::screens()) {
-            geometry = geometry.united(screen->geometry());
+        int top = 0;
+
+        for (QScreen *screen : QGuiApplication::screens()) {
+            auto screenRect = screen->geometry();
+
+            if (screenRect.top() < 0) {
+                top += screenRect.top() * -1;
+            }
+
+            if (screenRect.left() < 0) {
+                cursorPosition.setX(cursorPosition.x() + screenRect.width()); //= localCursorPos + screenRect.normalized().topLeft();
+            }
+
+            geometry = geometry.united(screenRect);
         }
+
+        cursorPosition.setY(cursorPosition.y() + top);
     }
 
     mPixmap = QApplication::primaryScreen()->grabWindow(QApplication::desktop()->winId(), geometry.x(), geometry.y(), geometry.width(), geometry.height());
+    mPixmap.setDevicePixelRatio(QApplication::desktop()->devicePixelRatio());
 
     if (mOptions.cursor && !mPixmap.isNull()) {
         QPainter painter(&mPixmap);
-        painter.drawPixmap(QCursor::pos(), os::cursor());
-    }
+        auto cursorInfo = os::cursor();
+        auto cursorPixmap = cursorInfo.first;
+        cursorPixmap.setDevicePixelRatio(QApplication::desktop()->devicePixelRatio()); 
 
-    mPixmap.setDevicePixelRatio(QApplication::desktop()->devicePixelRatio());
+#if 0 // Debug cursor position helper
+        painter.setBrush(QBrush(Qt::darkRed));
+        painter.setPen(QPen(QBrush(Qt::red), 5));
+        QRectF rect;
+        rect.setSize(QSizeF(100, 100));
+        rect.moveCenter(cursorPosition);
+        painter.drawRoundRect(rect, rect.size().height()*2, rect.size().height()*2);
+#endif
+
+        painter.drawPixmap(cursorPosition-cursorInfo.second, cursorPixmap);
+    }
 }
 
-QString Screenshot::newFileName() const
+const QString Screenshot::newFileName() const
 {
     if (!mOptions.directory.exists()) {
         mOptions.directory.mkpath(mOptions.directory.path());
@@ -469,7 +508,7 @@ bool Screenshot::unloadPixmap()
     }
 
     // Unloading the pixmap to reduce memory usage during previews
-    mUnloadFilename = mOptions.directory.path() + QDir::separator() + QString(".lstemp.%1%2").arg(qrand() * qrand() + QDateTime::currentDateTime().toTime_t()).arg(extension());
+    mUnloadFilename = QString("%1/.screenshot.%2%3").arg(mOptions.directory.path()).arg(qrand() * qrand() + QDateTime::currentDateTime().toTime_t()).arg(extension());
     mUnloaded       = mPixmap.save(mUnloadFilename, 0, mOptions.quality);
 
     if (mUnloaded) {
@@ -483,5 +522,3 @@ void Screenshot::wholeScreen()
 {
     grabDesktop();
 }
-
-

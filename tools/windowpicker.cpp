@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  Christian Kaiser
+ * Copyright (C) 2017  Christian Kaiser
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -46,7 +46,7 @@
     #include <X11/Xatom.h>
 #endif
 
-WindowPicker::WindowPicker() : QWidget(0), mCrosshair(":/icons/picker"), mWindowLabel(0), mTaken(false)
+WindowPicker::WindowPicker() : QWidget(0), mCrosshair(":/icons/picker"), mWindowLabel(Q_NULLPTR), mTaken(false), mCurrentWindow(0)
 {
 #if defined(Q_OS_WIN)
     setWindowFlags(Qt::SplashScreen | Qt::WindowStaysOnTopHint);
@@ -75,7 +75,7 @@ WindowPicker::WindowPicker() : QWidget(0), mCrosshair(":/icons/picker"), mWindow
     mCrosshairLabel->setPixmap(mCrosshair);
 
     QPushButton *closeButton = new QPushButton(tr("Close"));
-    connect(closeButton, SIGNAL(clicked()), this, SLOT(close()));
+    connect(closeButton, &QPushButton::clicked, this, &WindowPicker::close);
 
     QHBoxLayout *windowLayout = new QHBoxLayout;
     windowLayout->addWidget(mWindowIcon);

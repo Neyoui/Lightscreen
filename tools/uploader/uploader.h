@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  Christian Kaiser
+ * Copyright (C) 2017  Christian Kaiser
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -26,31 +26,30 @@
 class Uploader : public QObject
 {
     Q_OBJECT
+    Q_PROPERTY(int progress READ progress NOTIFY progressChanged)
+    Q_PROPERTY(QString lastUrl READ lastUrl)
 
 public:
     Uploader(QObject *parent = 0);
+
     static Uploader *instance();
+    static QNetworkAccessManager *network();
+    static QString serviceName(int index);
+
     QString lastUrl() const;
     int progress() const;
-    QNetworkAccessManager *nam();
+    int  uploading() const;
 
 public slots:
     void cancel();
-    //void error(const QString &file, const QtImgur::Error e);
-    void upload(const QString &fileName);
-    void uploaded(const QString &fileName, const QString &url, const QString &deleteHash);
-    void uploaderError(ImageUploader::Error code, QString errorString, QString fileName);
-    int  uploading();
-    void progressChange(int p);
-    void imgurAuthRefresh();
-    void imgurToken();
+    void upload(const QString &fileName, const QString &uploadService);
+    void reportProgress(int progressChanged);
 
 signals:
-    void done(QString, QString, QString);
-    void error(QString);
-    void progress(int);
+    void done(const QString &fileName, const QString &url, const QString &deleteHash);
+    void error(const QString &errorString);
+    void progressChanged(int progressChanged);
     void cancelAll();
-    void imgurAuthRefreshed();
 
 private:
     static Uploader *mInstance;

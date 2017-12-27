@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  Christian Kaiser
+ * Copyright (C) 2017  Christian Kaiser
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -36,10 +36,6 @@ public slots:
     void accepted();
     void checkUpdatesNow();
     void exportSettings();
-    void imgurAlbumList();
-    void imgurAuthorize();
-    void imgurRequestAlbumList();
-    void imgurToken();
     void importSettings();
     void loadSettings();
     void openUrl(QString url);

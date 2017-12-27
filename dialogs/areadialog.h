@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  Christian Kaiser
+ * Copyright (C) 2017  Christian Kaiser
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -43,13 +43,14 @@ class AreaDialog : public QDialog
 
 public:
     AreaDialog(Screenshot *screenshot);
-    QRect &resultRect();
+    QRect resultRect() const;
 
 protected slots:
     void animationTick(int frame);
     void cancel();
     void displayHelp();
     void grabRect();
+    void keyboardResize();
 
 signals:
     void regionGrabbed(const QPixmap &);
@@ -69,21 +70,21 @@ protected:
 
     QPoint limitPointToRect(const QPoint &p, const QRect &r) const;
 
-    bool   mAutoclose;
+    Screenshot *mScreenshot;
     QPoint mDragStartPoint;
-    bool   mGrabbing;
-    const int mHandleSize;
-    QTimer mIdleTimer;
     bool mMouseDown;
     bool mMouseMagnifier;
+    bool mNewSelection;
+    const int mHandleSize;
     QRect *mMouseOverHandle;
     QPoint mMousePos;
-    bool mNewSelection;
-    int  mOverlayAlpha;
-    Screenshot *mScreenshot;
+    QTimer mIdleTimer;
     QRect mSelection;
     QRect mSelectionBeforeDrag;
     bool  mShowHelp;
+    bool  mGrabbing;
+    int   mOverlayAlpha;
+    bool  mAutoclose;
 
     // naming convention for handles
     // T top, B bottom, R Right, L left
@@ -94,6 +95,8 @@ protected:
 
     QVector<QRect *>   mHandles;
     QPointer<QWidget> mAcceptWidget;
+
+    QString mKeyboardSize;
 };
 
 #endif

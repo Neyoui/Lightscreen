@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  Christian Kaiser
+ * Copyright (C) 2017  Christian Kaiser
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -30,10 +30,6 @@ class NamingDialog : public QDialog
 
 public:
     explicit NamingDialog(Screenshot::Naming naming, QWidget *parent = 0);
-
-private slots:
-    void openUrl(const QString &url);
-    void saveSettings();
 
 protected:
     bool eventFilter(QObject *object, QEvent *event);

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  Christian Kaiser
+ * Copyright (C) 2017  Christian Kaiser
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -32,8 +32,9 @@ public:
         PNG  = 0,
         JPEG = 1,
         BMP  = 2,
-        TIFF = 3
+        WEBP = 3
     };
+    Q_ENUM(Format)
 
     enum Naming {
         Numeric = 0,
@@ -41,19 +42,23 @@ public:
         Timestamp = 2,
         Empty = 3
     };
+    Q_ENUM(Naming)
 
     enum Mode {
-        WholeScreen  = 0,
-        ActiveWindow = 1,
-        SelectedArea = 2,
-        SelectedWindow = 3
+        None         = 0,
+        WholeScreen  = 1,
+        ActiveWindow = 2,
+        SelectedArea = 3,
+        SelectedWindow = 4
     };
+    Q_ENUM(Mode)
 
     enum Result {
-        Fail = 0,
+        Failure = 0,
         Success = 1,
         Cancel = 2
     };
+    Q_ENUM(Result)
 
     struct NamingOptions {
         Naming naming;
@@ -70,13 +75,14 @@ public:
         NamingOptions namingOptions;
         QDir directory;
         QString prefix;
+        QString uploadService;
 
         int mode;
         int quality;
 
         bool animations;
         bool clipboard;
-        bool imgurClipboard;
+        bool urlClipboard;
         bool currentMonitor;
         bool cursor;
         bool file;
@@ -91,10 +97,10 @@ public:
     Screenshot(QObject *parent, Screenshot::Options options);
     ~Screenshot();
 
-    Screenshot::Options &options();
+    const Screenshot::Options &options();
     QPixmap &pixmap();
     static QString getName(const NamingOptions &options, const QString &prefix, const QDir &directory);
-    QString &unloadedFileName();
+    const QString &unloadedFileName();
 
 public slots:
     void confirm(bool result = true);
@@ -108,6 +114,7 @@ public slots:
     void take();
     void upload();
     void uploadDone(const QString &url);
+    void refresh();
 
 signals:
     void askConfirmation();
@@ -116,9 +123,9 @@ signals:
 
 private:
     void activeWindow();
-    QString extension() const;
+    const QString extension() const;
     void grabDesktop();
-    QString newFileName() const;
+    const QString newFileName() const;
     void selectedArea();
     void selectedWindow();
     bool unloadPixmap();

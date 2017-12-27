@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016  Christian Kaiser
+ * Copyright (C) 2017  Christian Kaiser
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -35,7 +35,7 @@ class QIcon;
 
 namespace os {
 // Returns the cursor pixmap in Windows
-QPixmap cursor();
+QPair<QPixmap, QPoint> cursor();
 
 // A QTimeLine based effect for a slot (TODO: look at the new effect classes)
 void effect(QObject *target, const char *slot, int frames, int duration = 400, const char *cleanup = 0);
@@ -53,7 +53,7 @@ void setForegroundWindow(QWidget *window);
 void setStartup(bool startup, bool hide);
 
 // Creates a new QGraphicsDropShadowEffect to apply to widgets.
-QGraphicsEffect *shadow(QColor color = Qt::black, int blurRadius = 6, int offset = 1);
+QGraphicsEffect *shadow(const QColor &color = Qt::black, int blurRadius = 6, int offset = 1);
 
 // Returns a QIcon for the given icon name (taking into account color schemes and whatnot).
 QIcon icon(const QString &name, QColor backgroundColor = QColor());
